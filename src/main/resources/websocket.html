@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html>
+<body>
+<div>
+    <input type="text" id="input" placeholder="Provide city name">
+    <button onclick="sendMessage()">Send</button>
+</div>
+<div id="time"></div>
+<script>
+    const ws = new WebSocket('ws://localhost:8080/websocket');
+    ws.onmessage = function(event) {
+        receiveMessage(event.data);
+    };
+
+    ws.onclose = function(event) {
+        receiveMessage('The connection has been closed');
+    };
+
+    function sendMessage() {
+        const inputElement = document.getElementById('input');
+        const message = inputElement.value;
+        ws.send(message);
+    }
+
+    function receiveMessage(message) {
+        const timeElement = document.getElementById('time');
+        timeElement.textContent = message;
+    }
+</script>
+</body>
+</html>
