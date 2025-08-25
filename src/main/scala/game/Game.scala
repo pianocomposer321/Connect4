@@ -10,9 +10,9 @@ case class ColumnFull(col: Int) extends GameError(s"Column $col is full")
 case class NotYourTurn() extends GameError("It is the other player's turn")
 
 enum Token derives upickle.default.ReadWriter {
-  override def toString(): String = this match {
-    case RED => "R"
-    case YELLOW => "Y"
+  override def toString: String = this match {
+    case RED => "RED"
+    case YELLOW => "YELLOW"
   }
 
   case RED

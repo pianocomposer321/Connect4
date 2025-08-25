@@ -5,10 +5,14 @@ import game.GameState
 import scala.util.Try
 import scala.util.Failure
 import scala.util.Success
+import scala.collection.mutable.Map
 import game.Token
 import game.ColumnFull
 import game.NotYourTurn
 import upickle.default._
+import java.util.UUID
+import cask.endpoints.WsActor
+import cask.endpoints.WsChannelActor
 // import cask.router.Result.Success
 
 def sendText(channel: cask.WsChannelActor, t: String) = {
@@ -19,58 +23,80 @@ def sendJson[T: upickle.default.Writer](channel: cask.WsChannelActor, t: T) = {
   channel.send(cask.Ws.Text(upickle.default.write(t)))
 }
 
-sealed class ResponseError(msg: String) extends Exception(msg)
+sealed class ResponseError(msg: String) extends Exception(msg) {
+  def toJson = ujson.Obj("ok" -> false, "reason" -> this.getMessage)
+}
 case class InvalidCommand(command: String) extends ResponseError(s"Invalid command: $command")
 case class InvalidJson(text: String) extends ResponseError(s"Invalid json: $text")
 case class InvalidArguments(command: String, args: Option[ujson.Value]) extends ResponseError(s"Invalid arguments to command $command: $args")
 case class GameError(err: Throwable) extends ResponseError(err.getMessage)
+case class InvalidSessionID(id: UUID) extends ResponseError(s"Invalid Session: ${id.toString()}")
+case class InvalidPlayerID(id: UUID) extends ResponseError(s"Invalid Player: ${id.toString()}")
+case class PlayerNotConnected(id: UUID) extends ResponseError(s"Player not connected: ${id.toString()}")
 
 
 sealed trait CommandResponse
 case class OkResponse(message: Message) extends CommandResponse
 case class ErrResponse(err: ResponseError) extends CommandResponse
+case class NilResponse() extends CommandResponse
 
 
 sealed class Message(val typ: String, val data: ujson.Value) {
   def toJson = ujson.Obj("ok" -> true, "message_type" -> typ, "data" -> data)
 }
 case class StateMessage(state: GameState) extends Message("state", writeJs(state))
-case class AssignPlayerMessage(player: String, state: GameState) extends Message("assign_player", ujson.Obj("player" -> player, "state" -> writeJs(state)))
+case class AssignPlayerMessage(session: UUID, player: UUID, token: Token, state: GameState) extends Message("assign_player", ujson.Obj("session" -> session.toString(), "player" -> player.toString(), "token" -> token.toString, "state" -> writeJs(state)))
+case class CloseMessage() extends Message("close", ujson.Null)
 
 
-def handleStateCmd(channel: cask.WsChannelActor, args: Option[ujson.Value], game: Game): CommandResponse = {
-  OkResponse(StateMessage(game.gameState))
-}
-
-def handlePlaceCmd(channel: cask.WsChannelActor, maybe_args: Option[ujson.Value], game: Game): CommandResponse = {
-  val args = maybe_args match {
-    case Some(value) => value
-    case None => return ErrResponse(InvalidArguments("place", maybe_args))
-  }
-
-  Try(args.obj) match {
-    case Success(args) => (Try(args("col").num.toInt), Try(args("token").str)) match {
-      case (Success(col), Success("RED")) => game.placeToken(col, Token.RED) match {
-        case Failure(err) => return ErrResponse(GameError(err))
-        case _ => ()
-      }
-      case (Success(col), Success("YELLOW")) => game.placeToken(col, Token.YELLOW) match {
-        case Failure(err) => return ErrResponse(GameError(err))
-        case _ => ()
-      }
-      case _ => return ErrResponse(InvalidArguments("place", Some(args)))
-    }
-    case Failure(_) => return ErrResponse(InvalidArguments("place", Some(args)))
-  }
-
-  OkResponse(StateMessage(game.gameState))
-}
-
-case class Command(command: String, args: Option[ujson.Value] = None) derives upickle.default.ReadWriter
+case class Command(val player: UUID, session: UUID, command: String, args: Option[ujson.Value] = None) derives upickle.default.ReadWriter
 
 object Server extends cask.MainRoutes {
   private var game = Game()
-  private var assignedYellow = false
+  // private var assignedYellow = false
+
+  private var curSession = Session(UUID.randomUUID())
+  private var sessions: Map[UUID, Session] = Map(curSession.id -> curSession)
+
+  def newSession(channel: WsChannelActor) = {
+    curSession = Session(UUID.randomUUID())
+    sessions(curSession.id) = curSession
+    curSession.connectPlayerOne(channel)
+  }
+
+  def handleCommand(text: String): CommandResponse = {
+    val cmd = Try(upickle.default.read(text): Command) match {
+      case Success(cmd) => cmd
+      case Failure(e) => return ErrResponse(InvalidJson(text))
+    }
+    val session = sessions.get(cmd.session) match {
+      case Some(session) => session
+      case None => return ErrResponse(InvalidSessionID(cmd.session))
+    }
+
+    if (session.closed) {
+      sessions.remove(session.id)
+      ErrResponse(InvalidSessionID(cmd.session))
+    } else {
+      session.handleCommand(cmd)
+    }
+  }
+
+  def connectNewPlayer(channel: WsChannelActor): Unit = {
+    if (curSession.closed) {
+      sessions.remove(curSession.id)
+      newSession(channel)
+      return
+    }
+
+    if (!curSession.playerOneConnected) {
+      curSession.connectPlayerOne(channel)
+    } else if (!curSession.playerTwoConnected) {
+      curSession.connectPlayerTwo(channel)
+    } else {
+      newSession(channel)
+    }
+  }
 
   @cask.staticResources("/static")
   def static() = "."
@@ -78,29 +104,13 @@ object Server extends cask.MainRoutes {
   @cask.websocket("/websocket")
   def websocket(): cask.WsHandler =
     cask.WsHandler { channel =>
-      var player = "RED"
-      if (!assignedYellow) {
-        player = "YELLOW"
-        assignedYellow = true
-      }
-      // sendJson(channel, ujson.Obj("ok" -> true, "state" -> writeJs(game.gameState), "player" -> player))
-      sendJson(channel, AssignPlayerMessage(player, game.gameState).toJson)
+      connectNewPlayer(channel)
+
       cask.WsActor {
-        case cask.Ws.Text(text) => {
-          val res = Try(upickle.default.read(text): Command) match {
-            case Success(command) => command match {
-              case Command("state", args) => handleStateCmd(channel, args, game)
-              case Command("place", args) => handlePlaceCmd(channel, args, game)
-              case Command(command, _) => ErrResponse(InvalidCommand(command))
-            }
-            case Failure(e) => ErrResponse(InvalidJson(text))
-          }
-          // sendResult(channel, res)
-          res match {
-            case OkResponse(message) => {
-              sendJson(channel, message.toJson)
-            }
-            case ErrResponse(err) => sendJson(channel, ujson.Obj("ok" -> false, "reason" -> err.getMessage)) }
+        case cask.Ws.Text(text) => handleCommand(text) match {
+          case OkResponse(message) => sendJson(channel, message.toJson)
+          case ErrResponse(err) => sendJson(channel, err.toJson)
+          case NilResponse() => ()
         }
       }
     }
