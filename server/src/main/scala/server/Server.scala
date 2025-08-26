@@ -35,10 +35,11 @@ case class InvalidPlayerID(id: UUID) extends ResponseError(s"Invalid Player: ${i
 case class PlayerNotConnected(id: UUID) extends ResponseError(s"Player not connected: ${id.toString()}")
 
 
-sealed trait CommandResponse
-case class OkResponse(message: Message) extends CommandResponse
-case class ErrResponse(err: ResponseError) extends CommandResponse
-case class NilResponse() extends CommandResponse
+sealed trait Action
+case class SendMessage(message: Message) extends Action
+case class SendError(err: ResponseError) extends Action
+case class CloseSession(session: UUID) extends Action
+case class NilAction() extends Action
 
 
 sealed class Message(val typ: String, val data: ujson.Value) {
@@ -46,7 +47,6 @@ sealed class Message(val typ: String, val data: ujson.Value) {
 }
 case class StateMessage(state: GameState) extends Message("state", writeJs(state))
 case class AssignPlayerMessage(session: UUID, player: UUID, token: Token, state: GameState) extends Message("assign_player", ujson.Obj("session" -> session.toString(), "player" -> player.toString(), "token" -> token.toString, "state" -> writeJs(state)))
-case class CloseMessage() extends Message("close", ujson.Null)
 
 
 case class Command(val player: UUID, session: UUID, command: String, args: Option[ujson.Value] = None) derives upickle.default.ReadWriter
@@ -64,19 +64,19 @@ object Server extends cask.MainRoutes {
     curSession.connectPlayerOne(channel)
   }
 
-  def handleCommand(text: String): CommandResponse = {
+  def handleCommand(text: String): Action = {
     val cmd = Try(upickle.default.read(text): Command) match {
       case Success(cmd) => cmd
-      case Failure(e) => return ErrResponse(InvalidJson(text))
+      case Failure(e) => return SendError(InvalidJson(text))
     }
     val session = sessions.get(cmd.session) match {
       case Some(session) => session
-      case None => return ErrResponse(InvalidSessionID(cmd.session))
+      case None => return SendError(InvalidSessionID(cmd.session))
     }
 
     if (session.closed) {
       sessions.remove(session.id)
-      ErrResponse(InvalidSessionID(cmd.session))
+      SendError(InvalidSessionID(cmd.session))
     } else {
       session.handleCommand(cmd)
     }
@@ -108,9 +108,24 @@ object Server extends cask.MainRoutes {
 
       cask.WsActor {
         case cask.Ws.Text(text) => handleCommand(text) match {
-          case OkResponse(message) => sendJson(channel, message.toJson)
-          case ErrResponse(err) => sendJson(channel, err.toJson)
-          case NilResponse() => ()
+          case SendMessage(message) => sendJson(channel, message.toJson)
+          case SendError(err) => sendJson(channel, err.toJson)
+          case CloseSession(sessionId) => {
+            val oldSession = sessions.remove(sessionId).get
+            val newSession = Session(sessionId)
+            sessions(sessionId) = newSession
+
+            if (oldSession.playerOneConnected) {
+              newSession.connectPlayerOne(oldSession.playerOne.channel.get)
+            } else if (oldSession.playerTwoConnected) {
+              newSession.connectPlayerOne(oldSession.playerTwo.channel.get)
+            }
+
+            if (curSession.id == sessionId) {
+              curSession = newSession
+            }
+          }
+          case NilAction() => ()
         }
       }
     }

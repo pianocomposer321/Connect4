@@ -41,8 +41,3 @@ class StateMessage(Message):
             json_message["board"],
             json_message["turn"]
         )
-
-
-@dataclass
-class CloseMessage(Message):
-    pass

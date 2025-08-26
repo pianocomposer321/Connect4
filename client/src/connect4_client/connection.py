@@ -4,7 +4,7 @@ import queue
 from typing import Any, Callable, Optional
 import websocket
 
-from connect4_client.message import AssignPlayerMessage, CloseMessage, Message, StateMessage
+from connect4_client.message import AssignPlayerMessage, Message, StateMessage
 
 class Connection:
     uri: str
@@ -40,13 +40,8 @@ class Connection:
                     self.on_message(AssignPlayerMessage.from_json(json_message["data"]))
                 case "state":
                     self.on_message(StateMessage.from_json(json_message["data"]))
-                case "close":
-                    self.on_message(CloseMessage())
                 case _:
                     print(f"Unknown message type: {json_message['type']}")
-
-
-        # on_message = lambda _, message: self.on_message(message) if self.on_message else None
 
         ws_app = websocket.WebSocketApp(
             self.uri,

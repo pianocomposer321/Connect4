@@ -5,7 +5,7 @@ from connect4_client.button import Button
 from connect4_client.command import CloseCommand, Command, PlaceCommand
 
 from connect4_client.connection import Connection
-from connect4_client.message import AssignPlayerMessage, CloseMessage, Message, StateMessage
+from connect4_client.message import AssignPlayerMessage, Message, StateMessage
 
 ROWS = 6
 COLUMNS = 7
@@ -161,8 +161,6 @@ class Game:
                 self.stage = stage
                 self.board = board
                 self.my_turn = turn == self.token
-            case CloseMessage():
-                self.quit = True
             case _:
                 print(f"Unknown message type: {message}")
 

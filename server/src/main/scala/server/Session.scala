@@ -40,42 +40,67 @@ class Session(val id: UUID) {
     playerTwo.channel.foreach(channel => sendJson(channel, msg.toJson))
   }
 
-  def handleCommand(cmd: Command): CommandResponse = {
+  def handleCommand(cmd: Command): Action = {
     cmd match {
-      case Command(_, _, "state", args) => OkResponse(StateMessage(game.gameState))
+      case Command(_, _, "state", args) => SendMessage(StateMessage(game.gameState))
       case Command(_, _, "place", args) => handlePlaceCmd(args)
-      case Command(_, _, "close", _) => {
-        broadcast(CloseMessage())
-        closed = true
-        NilResponse()
+      case Command(player, _, "close", _) => {
+
+        if (player == playerOneId) {
+          playerOne.channel = None
+          return CloseSession(id)
+        }
+        playerTwo.channel = None
+        return CloseSession(id)
+
+
+        // if (!playerOneConnected || !playerTwoConnected) {
+        //   closed = true
+        //   return NilAction()
+        // }
+        //
+        // // Create new game
+        // game = Game()
+        // if (player == playerOneId) {
+        //   playerOne.channel = playerTwo.channel
+        //   playerOneId = playerTwoId
+        //   playerTwo.channel = None
+        //   playerTwoId = UUID.randomUUID()
+        //   playerOne.channel.foreach(channel => sendJson(channel, StateMessage(game.gameState).toJson))
+        // } else {
+        //   playerTwo.channel = None
+        //   playerOne.channel.foreach(channel => sendJson(channel, StateMessage(game.gameState).toJson))
+        // }
+        //
+        // NilAction()
       }
-      case Command(_, _, command, _) => ErrResponse(InvalidCommand(command))
+      case Command(_, _, command, _) => SendError(InvalidCommand(command))
     }
   }
 
-  def handlePlaceCmd(maybe_args: Option[ujson.Value]): CommandResponse = {
+  def handlePlaceCmd(maybe_args: Option[ujson.Value]): Action = {
     val args = maybe_args match {
       case Some(value) => value
-      case None => return ErrResponse(InvalidArguments("place", maybe_args))
+      case None => return SendError(InvalidArguments("place", maybe_args))
     }
 
     // TODO: rewrite this
     Try(args.obj) match {
       case Success(args) => (Try(args("col").num.toInt), Try(args("token").str)) match {
         case (Success(col), Success("RED")) => game.placeToken(col, Token.RED) match {
-          case Failure(err) => return ErrResponse(GameError(err))
+          case Failure(err) => return SendError(GameError(err))
           case _ => ()
         }
         case (Success(col), Success("YELLOW")) => game.placeToken(col, Token.YELLOW) match {
-          case Failure(err) => return ErrResponse(GameError(err))
+          case Failure(err) => return SendError(GameError(err))
           case _ => ()
         }
-        case _ => return ErrResponse(InvalidArguments("place", Some(args)))
+        case _ => return SendError(InvalidArguments("place", Some(args)))
       }
-      case Failure(_) => return ErrResponse(InvalidArguments("place", Some(args)))
+      case Failure(_) => return SendError(InvalidArguments("place", Some(args)))
     }
 
     broadcast(StateMessage(game.gameState))
-    NilResponse()
+    NilAction()
   }
 }
