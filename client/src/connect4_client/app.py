@@ -14,6 +14,7 @@ GRID_HEIGHT = CELL_SIZE * ROWS
 PADDING = 10
 
 class Game:
+    stage: str
     board: list[list[Optional[str]]]
     red_checker: pr.Texture
     yellow_checker: pr.Texture
@@ -28,6 +29,7 @@ class Game:
         pr.init_window(GRID_WIDTH, GRID_HEIGHT, "Connect 4")
         pr.set_target_fps(60)
 
+        self.stage = "NOT_STARTED"
         self.board = [[None for _ in range(ROWS)] for _ in range(COLUMNS)]
 
         self.connection = Connection("ws://localhost:8080/websocket", on_message=self._on_message)
@@ -66,6 +68,9 @@ class Game:
         return int(pr.get_mouse_x() / CELL_SIZE)
 
     def update(self):
+        if self.stage != "PLAYING":
+            return
+
         if pr.is_mouse_button_pressed(pr.MouseButton.MOUSE_BUTTON_LEFT) and self.my_turn:
             if self.token is None:
                 print("Not connected to server.")
@@ -100,22 +105,30 @@ class Game:
                     pr.draw_texture(self.yellow_checker, x * CELL_SIZE, CELL_SIZE * y, pr.WHITE)
 
     def draw(self):
-        # pr.clear_background(pr.BLACK)
         pr.clear_background(pr.Color(0x18, 0x18, 0x18, 0xff))
+
+        if self.stage == "NOT_STARTED":
+            text_width = pr.measure_text("Not started", 36)
+            pr.draw_text("Not started", int((GRID_WIDTH - text_width) / 2), int(GRID_HEIGHT * 2 / 5), 36, pr.WHITE)
+            text_width = pr.measure_text("Waiting for player 2 to join", 24)
+            pr.draw_text("Waiting for player 2 to join", int((GRID_WIDTH - text_width) / 2), int(GRID_HEIGHT / 2), 24, pr.WHITE)
+            return
+
         self.draw_grid()
         if self.my_turn:
             self.draw_shadow()
 
     def _on_message(self, message: Message):
         match message:
-            case AssignPlayerMessage(session, player, token, board, turn):
+            case AssignPlayerMessage(session, player, token, stage, board, turn):
                 self.session = session
                 self.player = player
                 self.token = token
+                self.stage = stage
                 self.board = board
                 self.my_turn = turn == self.token
-            case StateMessage(board, turn):
-                print(f"State: {board}")
+            case StateMessage(stage, board, turn):
+                self.stage = stage
                 self.board = board
                 self.my_turn = turn == self.token
             case CloseMessage():
