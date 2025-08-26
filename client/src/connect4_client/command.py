@@ -31,3 +31,8 @@ class PlaceCommand(Command):
 class CloseCommand(Command):
     def __init__(self):
         super().__init__("close", None)
+
+
+class NewGameCommand(Command):
+    def __init__(self):
+        super().__init__("new_game", None)

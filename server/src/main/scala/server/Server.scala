@@ -39,6 +39,7 @@ sealed trait Action
 case class SendMessage(message: Message) extends Action
 case class SendError(err: ResponseError) extends Action
 case class CloseSession(session: UUID) extends Action
+case class ReplaceSession(session: UUID) extends Action
 case class NilAction() extends Action
 
 
@@ -74,21 +75,10 @@ object Server extends cask.MainRoutes {
       case None => return SendError(InvalidSessionID(cmd.session))
     }
 
-    if (session.closed) {
-      sessions.remove(session.id)
-      SendError(InvalidSessionID(cmd.session))
-    } else {
-      session.handleCommand(cmd)
-    }
+    session.handleCommand(cmd)
   }
 
   def connectNewPlayer(channel: WsChannelActor): Unit = {
-    if (curSession.closed) {
-      sessions.remove(curSession.id)
-      newSession(channel)
-      return
-    }
-
     if (!curSession.playerOneConnected) {
       curSession.connectPlayerOne(channel)
     } else if (!curSession.playerTwoConnected) {
@@ -111,6 +101,13 @@ object Server extends cask.MainRoutes {
           case SendMessage(message) => sendJson(channel, message.toJson)
           case SendError(err) => sendJson(channel, err.toJson)
           case CloseSession(sessionId) => {
+            sessions.remove(sessionId)
+            if (curSession.id == sessionId) {
+              curSession = Session(UUID.randomUUID())
+              sessions(curSession.id) = curSession
+            }
+          }
+          case ReplaceSession(sessionId) => {
             val oldSession = sessions.remove(sessionId).get
             val newSession = Session(sessionId)
             sessions(sessionId) = newSession

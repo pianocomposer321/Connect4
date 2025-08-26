@@ -14,7 +14,6 @@ case class PlayerConnection(val token: Token, var channel: Option[WsChannelActor
 
 class Session(val id: UUID) {
   var game = Game()
-  var closed = false
 
   var playerOneId = UUID.randomUUID()
   var playerOne = PlayerConnection(Token.YELLOW)
@@ -46,33 +45,26 @@ class Session(val id: UUID) {
       case Command(_, _, "place", args) => handlePlaceCmd(args)
       case Command(player, _, "close", _) => {
 
-        if (player == playerOneId) {
-          playerOne.channel = None
+        if (!playerOneConnected || !playerTwoConnected) {
           return CloseSession(id)
         }
+
+        if (player == playerOneId) {
+          playerOne.channel = None
+          return ReplaceSession(id)
+        }
         playerTwo.channel = None
-        return CloseSession(id)
+        return ReplaceSession(id)
+      }
+      case Command(_, _, "new_game", _) => {
+        if (game.gameState.stage == GameStage.PLAYING) {
+          return SendError(InvalidCommand("new_game"))
+        }
 
-
-        // if (!playerOneConnected || !playerTwoConnected) {
-        //   closed = true
-        //   return NilAction()
-        // }
-        //
-        // // Create new game
-        // game = Game()
-        // if (player == playerOneId) {
-        //   playerOne.channel = playerTwo.channel
-        //   playerOneId = playerTwoId
-        //   playerTwo.channel = None
-        //   playerTwoId = UUID.randomUUID()
-        //   playerOne.channel.foreach(channel => sendJson(channel, StateMessage(game.gameState).toJson))
-        // } else {
-        //   playerTwo.channel = None
-        //   playerOne.channel.foreach(channel => sendJson(channel, StateMessage(game.gameState).toJson))
-        // }
-        //
-        // NilAction()
+        game = Game()
+        game.startGame()
+        broadcast(StateMessage(game.gameState))
+        NilAction()
       }
       case Command(_, _, command, _) => SendError(InvalidCommand(command))
     }

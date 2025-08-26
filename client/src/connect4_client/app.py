@@ -2,7 +2,7 @@ import json
 from typing import Optional
 import pyray as pr
 from connect4_client.button import Button
-from connect4_client.command import CloseCommand, Command, PlaceCommand
+from connect4_client.command import CloseCommand, Command, NewGameCommand, PlaceCommand
 
 from connect4_client.connection import Connection
 from connect4_client.message import AssignPlayerMessage, Message, StateMessage
@@ -47,9 +47,12 @@ class Game:
         self.quit = False
 
         play_again_button_pos = (GRID_WIDTH // 3, GRID_HEIGHT * 2 // 3)
-        self.play_again_button = Button("Play again", play_again_button_pos, lambda: print("Play again"), pr.GREEN)
+        self.play_again_button = Button("Play again", play_again_button_pos, lambda: self.send_command(NewGameCommand()), pr.GREEN)
         quit_button_pos = (GRID_WIDTH * 2 // 3, GRID_HEIGHT * 2 // 3)
-        self.quit_button = Button("Quit", quit_button_pos, lambda: print("Quit"), pr.RED)
+        self.quit_button = Button("Quit", quit_button_pos, self.do_quit, pr.RED)
+
+    def do_quit(self):
+        self.quit = True
 
     def main_loop(self):
         while not self.quit:
