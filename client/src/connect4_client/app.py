@@ -113,6 +113,16 @@ class Game:
             text_width = pr.measure_text("Waiting for player 2 to join", 24)
             pr.draw_text("Waiting for player 2 to join", int((GRID_WIDTH - text_width) / 2), int(GRID_HEIGHT / 2), 24, pr.WHITE)
             return
+        if self.stage == "WON":
+            text_width = pr.measure_text("Game over", 36)
+            pr.draw_text("Game over", int((GRID_WIDTH - text_width) / 2), int(GRID_HEIGHT * 2 / 5), 36, pr.WHITE)
+            if self.my_turn:
+                text_width = pr.measure_text("You won!", 24)
+                pr.draw_text("You won!", int((GRID_WIDTH - text_width) / 2), int(GRID_HEIGHT / 2), 24, pr.WHITE)
+            else:
+                text_width = pr.measure_text("You lost!", 24)
+                pr.draw_text("You lost!", int((GRID_WIDTH - text_width) / 2), int(GRID_HEIGHT / 2), 24, pr.WHITE)
+            return
 
         self.draw_grid()
         if self.my_turn:

@@ -26,7 +26,7 @@ type Board = Array[Array[Option[Token]]]
 enum GameStage derives upickle.default.ReadWriter {
   case NOT_STARTED
   case PLAYING
-  case OVER
+  case WON
 }
 
 case class GameState(stage: GameStage, board: Board, turn: Token) derives upickle.default.ReadWriter
@@ -40,15 +40,64 @@ class Game {
   def getToken(col: Int, row: Int): Option[Token] = board(col)(row)
   def getTurn = turn
 
+  def checkForWinAt(col: Int, row: Int): Option[Token] = {
+    val initialColor = board(col)(row) match {
+      case Some(token) => token
+      case None => return None
+    }
+
+    // Column
+    if (row + 3 < Game.ROWS
+        && board(col)(row + 1).contains(initialColor)
+        && board(col)(row + 2).contains(initialColor)
+        && board(col)(row + 3).contains(initialColor)) return Some(initialColor)
+
+    // Diagonal 1
+    if (row + 3 < Game.ROWS && col + 3 < Game.COLS
+        && board(col + 1)(row + 1).contains(initialColor)
+        && board(col + 2)(row + 2).contains(initialColor)
+        && board(col + 3)(row + 3).contains(initialColor)) return Some(initialColor)
+
+    // Row
+    if (col + 3 < Game.COLS
+        && board(col + 1)(row).contains(initialColor)
+        && board(col + 2)(row).contains(initialColor)
+        && board(col + 3)(row).contains(initialColor)) return Some(initialColor)
+
+    // Diagonal 2
+    if (row - 3 >= 0 && col + 3 < Game.COLS
+        && board(col + 1)(row - 1).contains(initialColor)
+        && board(col + 2)(row - 2).contains(initialColor)
+        && board(col + 3)(row - 3).contains(initialColor)) return Some(initialColor)
+
+    None
+  }
+
+  def checkForWin(): Option[Token] = {
+    stage match {
+      case GameStage.NOT_STARTED => return None
+      case GameStage.WON => return Some(turn)
+      case _ =>
+    }
+
+    for col <- 0 until Game.COLS do {
+      for row <- 0 until Game.ROWS do {
+        val winner = checkForWinAt(col, row)
+        if winner.isDefined then return winner
+      }
+    }
+    None
+  }
+
   def startGame() = {
     stage = GameStage.PLAYING
   }
 
   def placeToken(col: Int, token: Token): Try[Unit] = {
-    if stage == GameStage.NOT_STARTED then {
-      return Failure(GameNotStarted())
-    } else if stage == GameStage.OVER then {
-      return Failure(GameOver())
+    stage match {
+      case GameStage.NOT_STARTED => return Failure(GameNotStarted())
+      case GameStage.WON => return Failure(GameOver())
+      case _ =>
     }
 
     val ind = board(col).lastIndexWhere(token => token == None)
@@ -58,6 +107,11 @@ class Game {
       Failure(NotYourTurn())
     } else {
       board(col)(ind) = Some(token)
+      val winner = checkForWin()
+      if winner.isDefined then {
+        stage = GameStage.WON
+        return Success(())
+      }
       turn = turn match {
         case Token.RED => Token.YELLOW
         case Token.YELLOW => Token.RED
