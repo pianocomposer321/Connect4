@@ -11,19 +11,24 @@ COLUMNS = 7
 CELL_SIZE = 100
 GRID_WIDTH = CELL_SIZE * COLUMNS
 GRID_HEIGHT = CELL_SIZE * ROWS
+PADDING = 10
 
 class Game:
+    board: list[list[Optional[str]]]
     red_checker: pr.Texture
     yellow_checker: pr.Texture
     connection: Connection
     session: Optional[str]
     player: Optional[str]
     token: Optional[str]
+    my_turn: bool
     quit: bool
 
     def __init__(self):
         pr.init_window(GRID_WIDTH, GRID_HEIGHT, "Connect 4")
         pr.set_target_fps(60)
+
+        self.board = [[None for _ in range(ROWS)] for _ in range(COLUMNS)]
 
         self.connection = Connection("ws://localhost:8080/websocket", on_message=self._on_message)
         self.connection.start()
@@ -31,25 +36,16 @@ class Game:
         self.red_checker = pr.load_texture("assets/checker_red.png")
         self.yellow_checker = pr.load_texture("assets/checker_yellow.png")
 
+        self.token = None
+        self.my_turn = False
         self.quit = False
 
     def main_loop(self):
         while not self.quit:
+            self.update()
+
             pr.begin_drawing()
-            pr.clear_background(pr.BLACK)
-
-            # if not self.connection.is_connected():
-            #     pr.draw_text("Connecting...", 190, 200, 20, pr.VIOLET)
-            # else:
-            #     pr.draw_text("Connected", 190, 200, 20, pr.VIOLET)
-
-            if pr.is_mouse_button_pressed(pr.MouseButton.MOUSE_BUTTON_LEFT):
-                if self.token is None:
-                    print("Not connected to server.")
-                    return
-
-                self.send_command(PlaceCommand(1, self.token))
-
+            self.draw()
             pr.end_drawing()
 
             if pr.window_should_close():
@@ -66,25 +62,63 @@ class Game:
 
         self.send_command(CloseCommand())
 
+    def get_mouse_column(self):
+        return int(pr.get_mouse_x() / CELL_SIZE)
+
+    def update(self):
+        if pr.is_mouse_button_pressed(pr.MouseButton.MOUSE_BUTTON_LEFT) and self.my_turn:
+            if self.token is None:
+                print("Not connected to server.")
+                return
+
+            self.send_command(PlaceCommand(self.get_mouse_column(), self.token))
+
+    def draw_shadow(self):
+        column = self.get_mouse_column()
+        row_ind = 0
+        for ind, row in enumerate(self.board[column]):
+            if row is not None:
+                row_ind = ind - 1
+                break
+        else:
+            row_ind = ROWS - 1
+
+        if self.token == "RED":
+            pr.draw_texture(self.red_checker, column * CELL_SIZE, CELL_SIZE * row_ind, pr.Color(255, 255, 255, 150))
+        elif self.token == "YELLOW":
+            pr.draw_texture(self.yellow_checker, column * CELL_SIZE, CELL_SIZE * row_ind, pr.Color(255, 255, 255, 150))
+
+    def draw_grid(self):
+        for x, column in enumerate(self.board):
+            for y, token in enumerate(column):
+                if token is None:
+                    continue
+
+                if token == "RED":
+                    pr.draw_texture(self.red_checker, x * CELL_SIZE, CELL_SIZE * y, pr.WHITE)
+                elif token == "YELLOW":
+                    pr.draw_texture(self.yellow_checker, x * CELL_SIZE, CELL_SIZE * y, pr.WHITE)
+
+    def draw(self):
+        # pr.clear_background(pr.BLACK)
+        pr.clear_background(pr.Color(0x18, 0x18, 0x18, 0xff))
+        self.draw_grid()
+        if self.my_turn:
+            self.draw_shadow()
+
     def _on_message(self, message: Message):
         match message:
             case AssignPlayerMessage(session, player, token, board, turn):
-                print("Assign player")
-                print(f"Session: {session}")
-                print(f"Player: {player}")
-                print(f"Token: {token}")
-                print(f"Board: {board}")
-                print(f"Turn: {turn}")
-
                 self.session = session
                 self.player = player
                 self.token = token
+                self.board = board
+                self.my_turn = turn == self.token
             case StateMessage(board, turn):
-                print("State")
-                print(f"Board: {board}")
-                print(f"Turn: {turn}")
+                print(f"State: {board}")
+                self.board = board
+                self.my_turn = turn == self.token
             case CloseMessage():
-                print("Connection closed")
                 self.quit = True
             case _:
                 print(f"Unknown message type: {message}")
