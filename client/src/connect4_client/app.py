@@ -1,6 +1,7 @@
 import json
 from typing import Optional
 import pyray as pr
+from connect4_client.button import Button
 from connect4_client.command import CloseCommand, Command, PlaceCommand
 
 from connect4_client.connection import Connection
@@ -25,6 +26,9 @@ class Game:
     my_turn: bool
     quit: bool
 
+    play_again_button: Button
+    quit_button: Button
+
     def __init__(self):
         pr.init_window(GRID_WIDTH, GRID_HEIGHT, "Connect 4")
         pr.set_target_fps(60)
@@ -41,6 +45,11 @@ class Game:
         self.token = None
         self.my_turn = False
         self.quit = False
+
+        play_again_button_pos = (GRID_WIDTH // 3, GRID_HEIGHT * 2 // 3)
+        self.play_again_button = Button("Play again", play_again_button_pos, lambda: print("Play again"), pr.GREEN)
+        quit_button_pos = (GRID_WIDTH * 2 // 3, GRID_HEIGHT * 2 // 3)
+        self.quit_button = Button("Quit", quit_button_pos, lambda: print("Quit"), pr.RED)
 
     def main_loop(self):
         while not self.quit:
@@ -68,7 +77,13 @@ class Game:
         return int(pr.get_mouse_x() / CELL_SIZE)
 
     def update(self):
-        if self.stage != "PLAYING":
+        # if self.stage != "PLAYING":
+        if self.stage == "NOT_STARTED":
+            return
+
+        if self.stage == "WON":
+            self.play_again_button.update()
+            self.quit_button.update()
             return
 
         if pr.is_mouse_button_pressed(pr.MouseButton.MOUSE_BUTTON_LEFT) and self.my_turn:
@@ -113,8 +128,10 @@ class Game:
             text_width = pr.measure_text("Waiting for player 2 to join", 24)
             pr.draw_text("Waiting for player 2 to join", int((GRID_WIDTH - text_width) / 2), int(GRID_HEIGHT / 2), 24, pr.WHITE)
             return
+
         if self.stage == "WON":
             text_width = pr.measure_text("Game over", 36)
+            # text_width = pr.measure_text_ex(pr.get_font_default(), "Game over", 36, 0).x
             pr.draw_text("Game over", int((GRID_WIDTH - text_width) / 2), int(GRID_HEIGHT * 2 / 5), 36, pr.WHITE)
             if self.my_turn:
                 text_width = pr.measure_text("You won!", 24)
@@ -122,6 +139,9 @@ class Game:
             else:
                 text_width = pr.measure_text("You lost!", 24)
                 pr.draw_text("You lost!", int((GRID_WIDTH - text_width) / 2), int(GRID_HEIGHT / 2), 24, pr.WHITE)
+
+            self.play_again_button.draw()
+            self.quit_button.draw()
             return
 
         self.draw_grid()
