@@ -1,6 +1,6 @@
-## Connect4
+# Connect4
 
-### Requirements
+## Requirements
 
 **Server:**
 - scala
@@ -10,16 +10,16 @@
 - python
 - poetry
 
-### Usage
+## Usage
 
-##### Server:
+### Server:
 
 ```console
 $ cd server
 $ sbt ~run
 ```
 
-##### Client
+### Client:
 
 ```console
 $ cd client
