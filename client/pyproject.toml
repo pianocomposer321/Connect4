@@ -1,0 +1,24 @@
+[project]
+name = "connect4-client"
+version = "0.1.0"
+description = ""
+authors = [
+    {name = "pianocomposer321",email = "tmarklebw88@gmail.com"}
+]
+readme = "README.md"
+requires-python = ">=3.13"
+dependencies = [
+    "websocket-client (>=1.8.0,<2.0.0)",
+    "raylib (>=5.5.0.2,<6.0.0.0)"
+]
+
+[tool.poetry]
+packages = [{include = "connect4_client", from = "src"}]
+
+[tool.poetry.scripts]
+main = "connect4_client:main"
+
+
+[build-system]
+requires = ["poetry-core>=2.0.0,<3.0.0"]
+build-backend = "poetry.core.masonry.api"
