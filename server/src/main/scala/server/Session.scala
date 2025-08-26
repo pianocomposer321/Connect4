@@ -7,6 +7,7 @@ import scala.util.Try
 import scala.util.Failure
 import java.util.UUID
 import scala.util.Success
+import game.GameStage
 
 case class PlayerConnection(val token: Token, var channel: Option[WsChannelActor] = None)
 
@@ -28,8 +29,10 @@ class Session(val id: UUID) {
     playerOne.channel = Some(channel)
   }
   def connectPlayerTwo(channel: WsChannelActor) = {
+    game.startGame()
     sendJson(channel, AssignPlayerMessage(id, playerTwoId, Token.RED, game.gameState).toJson)
     playerTwo.channel = Some(channel)
+    playerOne.channel.foreach(channel => sendJson(channel, StateMessage(game.gameState).toJson))
   }
 
   def broadcast(msg: Message) = {

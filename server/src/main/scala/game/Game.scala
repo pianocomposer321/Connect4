@@ -5,6 +5,8 @@ import scala.util.Success
 import scala.util.Failure
 
 sealed class GameError(msg: String) extends Exception(msg)
+case class GameNotStarted() extends GameError("Game has not started")
+case class GameOver() extends GameError("Game is over")
 case class TokenAlreadyPlaced(col: Int, row: Int) extends GameError(s"Token already placed in position $col, $row")
 case class ColumnFull(col: Int) extends GameError(s"Column $col is full")
 case class NotYourTurn() extends GameError("It is the other player's turn")
@@ -21,19 +23,34 @@ enum Token derives upickle.default.ReadWriter {
 
 type Board = Array[Array[Option[Token]]]
 
-case class GameState(board: Board, turn: Token) derives upickle.default.ReadWriter
+enum GameStage derives upickle.default.ReadWriter {
+  case NOT_STARTED
+  case PLAYING
+  case OVER
+}
+
+case class GameState(stage: GameStage, board: Board, turn: Token) derives upickle.default.ReadWriter
 
 class Game {
   private var board: Board = Array.fill(Game.COLS)(Array.fill(Game.ROWS)(None))
   private var turn: Token = Token.YELLOW
+  private var stage: GameStage = GameStage.NOT_STARTED
 
-  def gameState = GameState(board, turn)
-
+  def gameState = GameState(stage, board, turn)
   def getToken(col: Int, row: Int): Option[Token] = board(col)(row)
-
   def getTurn = turn
 
+  def startGame() = {
+    stage = GameStage.PLAYING
+  }
+
   def placeToken(col: Int, token: Token): Try[Unit] = {
+    if stage == GameStage.NOT_STARTED then {
+      return Failure(GameNotStarted())
+    } else if stage == GameStage.OVER then {
+      return Failure(GameOver())
+    }
+
     val ind = board(col).lastIndexWhere(token => token == None)
     if ind == -1 then {
       Failure(ColumnFull(col))
