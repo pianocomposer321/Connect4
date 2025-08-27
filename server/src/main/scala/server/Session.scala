@@ -9,52 +9,24 @@ import java.util.UUID
 import scala.util.Success
 import game.GameStage
 
-case class PlayerConnection(val token: Token, var channel: Option[WsChannelActor] = None)
+case class Player(val token: Token, var session: SessionID = SessionID.newSessionID, var id: PlayerID = PlayerID.newPlayerID)
 
 
-class Session(val id: UUID) {
+class Session(val id: SessionID = SessionID.newSessionID) {
   var game = Game()
 
-  var playerOneId = UUID.randomUUID()
-  var playerOne = PlayerConnection(Token.YELLOW)
-  var playerTwoId = UUID.randomUUID()
-  var playerTwo = PlayerConnection(Token.RED)
+  var playerOne = Player(Token.YELLOW, id)
+  var playerTwo = Player(Token.RED, id)
 
-  def playerOneConnected = playerOne.channel.isDefined
-  def playerTwoConnected = playerTwo.channel.isDefined
-
-  def connectPlayerOne(channel: WsChannelActor) = {
-    sendJson(channel, AssignPlayerMessage(id, playerOneId, Token.YELLOW, game.gameState).toJson)
-    playerOne.channel = Some(channel)
-  }
-  def connectPlayerTwo(channel: WsChannelActor) = {
-    game.startGame()
-    sendJson(channel, AssignPlayerMessage(id, playerTwoId, Token.RED, game.gameState).toJson)
-    playerTwo.channel = Some(channel)
-    playerOne.channel.foreach(channel => sendJson(channel, StateMessage(game.gameState).toJson))
-  }
-
-  def broadcast(msg: Message) = {
-    playerOne.channel.foreach(channel => sendJson(channel, msg.toJson))
-    playerTwo.channel.foreach(channel => sendJson(channel, msg.toJson))
-  }
+  def broadcast(msg: Message): Action = SendMessage(msg, Set(playerOne.id, playerTwo.id))
 
   def handleCommand(cmd: Command): Action = {
     cmd match {
       case Command(_, _, "state", args) => SendMessage(StateMessage(game.gameState))
       case Command(_, _, "place", args) => handlePlaceCmd(args)
-      case Command(player, _, "close", _) => {
-
-        if (!playerOneConnected || !playerTwoConnected) {
-          return CloseSession(id)
-        }
-
-        if (player == playerOneId) {
-          playerOne.channel = None
-          return ReplaceSession(id)
-        }
-        playerTwo.channel = None
-        return ReplaceSession(id)
+      case Command(playerId, _, "close", _) => {
+        val player = if playerId == playerOne.id then playerOne else playerTwo
+        DisconnectPlayer(player)
       }
       case Command(_, _, "new_game", _) => {
         if (game.gameState.stage == GameStage.PLAYING) {
@@ -64,7 +36,6 @@ class Session(val id: UUID) {
         game = Game()
         game.startGame()
         broadcast(StateMessage(game.gameState))
-        NilAction()
       }
       case Command(_, _, command, _) => SendError(InvalidCommand(command))
     }
@@ -75,24 +46,30 @@ class Session(val id: UUID) {
       case Some(value) => value
       case None => return SendError(InvalidArguments("place", maybe_args))
     }
-
-    // TODO: rewrite this
-    Try(args.obj) match {
-      case Success(args) => (Try(args("col").num.toInt), Try(args("token").str)) match {
-        case (Success(col), Success("RED")) => game.placeToken(col, Token.RED) match {
-          case Failure(err) => return SendError(GameError(err))
-          case _ => ()
-        }
-        case (Success(col), Success("YELLOW")) => game.placeToken(col, Token.YELLOW) match {
-          case Failure(err) => return SendError(GameError(err))
-          case _ => ()
-        }
-        case _ => return SendError(InvalidArguments("place", Some(args)))
-      }
+    val args_obj = Try(args.obj) match {
+      case Success(value) => value
+      case Failure(_) => return SendError(InvalidArguments("place", Some(args)))
+    }
+    val col = Try(args_obj("col").num.toInt) match {
+      case Success(value) => value
+      case Failure(_) => return SendError(InvalidArguments("place", Some(args)))
+    }
+    val token = Try(args_obj("token").str) match {
+      case Success(value) => value
       case Failure(_) => return SendError(InvalidArguments("place", Some(args)))
     }
 
+    token match {
+      case "RED" => game.placeToken(col, Token.RED) match {
+        case Failure(err) => return SendError(GameError(err))
+        case _ => ()
+      }
+      case "YELLOW" => game.placeToken(col, Token.YELLOW) match {
+        case Failure(err) => return SendError(GameError(err))
+        case _ => ()
+      }
+      case _ => return SendError(InvalidArguments("place", Some(args)))
+    }
     broadcast(StateMessage(game.gameState))
-    NilAction()
   }
 }

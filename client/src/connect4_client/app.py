@@ -42,6 +42,7 @@ class Game:
         self.red_checker = pr.load_texture("assets/checker_red.png")
         self.yellow_checker = pr.load_texture("assets/checker_yellow.png")
 
+        self.session = None
         self.token = None
         self.my_turn = False
         self.quit = False
@@ -160,6 +161,7 @@ class Game:
                 self.stage = stage
                 self.board = board
                 self.my_turn = turn == self.token
+                print(f"Assigned player {player} to session {session} with token {token}.")
             case StateMessage(stage, board, turn):
                 self.stage = stage
                 self.board = board
