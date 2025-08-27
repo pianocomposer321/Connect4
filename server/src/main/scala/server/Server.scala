@@ -13,7 +13,6 @@ import upickle.default._
 import java.util.UUID
 import cask.endpoints.WsActor
 import cask.endpoints.WsChannelActor
-// import cask.router.Result.Success
 
 def sendText(channel: cask.WsChannelActor, t: String) = {
   channel.send(cask.Ws.Text(t))
@@ -50,9 +49,7 @@ sealed trait Action
 case class SendMessage(message: Message, recipients: Set[PlayerID] = Set.empty) extends Action
 case class SendError(err: ResponseError, recipients: Set[PlayerID] = Set.empty) extends Action
 case class CloseSession(session: SessionID) extends Action
-// case class ReplaceSession(session: SessionID) extends Action
 case class DisconnectPlayer(player: Player) extends Action
-case class NilAction() extends Action
 
 
 sealed class Message(val typ: String, val data: ujson.Value) {
@@ -81,7 +78,6 @@ object Server extends cask.MainRoutes {
     sessions(curSession.id) = curSession
     playerConnections(curSession.playerOne.id) = channel
     sendJson(channel, AssignPlayerMessage(curSession.id.uuid, curSession.playerOne.id.uuid, Token.YELLOW, curSession.game.gameState).toJson)
-    // curSession.connectPlayerOne(channel)
   }
 
   def playerConnected(player: PlayerID) = {
@@ -193,25 +189,6 @@ object Server extends cask.MainRoutes {
     }
   }
 
-  // def replaceSession(sessionId: SessionID): Unit = {
-  //   val oldSession = sessions.remove(sessionId).get
-  //   val newSession = Session(sessionId)
-  //   sessions(sessionId) = newSession
-  //
-  //   // if (oldSession.playerOneConnected) {
-  //   if (playerConnected(oldSession.playerOne.id)) {
-  //     playerConnections(newSession.playerOne.id) = playerConnections(oldSession.playerOne.id)
-  //     playerConnections.remove(oldSession.playerOne.id)
-  //   } else if (playerConnected(oldSession.playerTwo.id)) {
-  //     playerConnections(newSession.playerTwo.id) = playerConnections(oldSession.playerTwo.id)
-  //     playerConnections.remove(oldSession.playerTwo.id)
-  //   }
-  //
-  //   if (curSession.id == sessionId) {
-  //     curSession = newSession
-  //   }
-  // }
-
   @cask.staticResources("/static")
   def static() = "."
 
@@ -225,9 +202,7 @@ object Server extends cask.MainRoutes {
           case SendMessage(message, recipients) => sendMessage(message, recipients, channel)
           case SendError(err, recipients) => sendError(err, recipients, channel)
           case CloseSession(sessionId) => closeSession(sessionId)
-          // case ReplaceSession(sessionId) => replaceSession(sessionId)
           case DisconnectPlayer(player) => disconnectPlayer(player, channel)
-          case NilAction() => ()
         }
       }
     }
