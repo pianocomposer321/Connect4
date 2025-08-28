@@ -1,5 +1,7 @@
 import json
 from typing import Optional
+import os
+
 import pyray as pr
 from connect4_client.button import Button
 from connect4_client.command import CloseCommand, Command, NewGameCommand, PlaceCommand
@@ -13,6 +15,9 @@ CELL_SIZE = 100
 GRID_WIDTH = CELL_SIZE * COLUMNS
 GRID_HEIGHT = CELL_SIZE * ROWS
 PADDING = 10
+
+IP_ADDR = os.environ.get("CONNECT4_IP_ADDR", "localhost")
+PORT = os.environ.get("CONNECT4_PORT", 8080)
 
 class Game:
     stage: str
@@ -36,7 +41,7 @@ class Game:
         self.stage = "NOT_STARTED"
         self.board = [[None for _ in range(ROWS)] for _ in range(COLUMNS)]
 
-        self.connection = Connection("ws://localhost:8080/websocket", on_message=self._on_message)
+        self.connection = Connection(f"ws://{IP_ADDR}:{PORT}/websocket", on_message=self._on_message)
         self.connection.start()
 
         self.red_checker = pr.load_texture("assets/checker_red.png")
