@@ -138,9 +138,11 @@ class Game:
             pr.draw_text("Waiting for player 2 to join", int((GRID_WIDTH - text_width) / 2), int(GRID_HEIGHT / 2), 24, pr.WHITE)
             return
 
+        self.draw_grid()
+
         if self.stage == "WON":
+            pr.draw_rectangle(0, 0, GRID_WIDTH, GRID_HEIGHT, pr.Color(0x18, 0x18, 0x18, 0x99))
             text_width = pr.measure_text("Game over", 36)
-            # text_width = pr.measure_text_ex(pr.get_font_default(), "Game over", 36, 0).x
             pr.draw_text("Game over", int((GRID_WIDTH - text_width) / 2), int(GRID_HEIGHT * 2 / 5), 36, pr.WHITE)
             if self.my_turn:
                 text_width = pr.measure_text("You won!", 24)
@@ -153,7 +155,6 @@ class Game:
             self.quit_button.draw()
             return
 
-        self.draw_grid()
         if self.my_turn:
             self.draw_shadow()
 
